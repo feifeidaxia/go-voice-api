@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 )
 
@@ -13,6 +14,7 @@ var HTTPClient *http.Client
 
 func InitHTTPClient() {
 	proxyURL, _ := url.Parse("http://127.0.0.1:6987") // HTTP 代理地址
+	log.Println("USE_PROXY =", os.Getenv("USE_PROXY"))
 
 	transport := &http.Transport{
 		Proxy: http.ProxyURL(proxyURL),

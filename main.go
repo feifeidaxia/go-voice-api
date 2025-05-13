@@ -23,12 +23,11 @@ import (
 // @host            localhost:8080
 // @BasePath        /
 func main() {
-	// 初始化 HTTP 客户端（含代理判断）
-	utils.InitHTTPClient()
-
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, using system env")
 	}
+
+	utils.InitHTTPClient()
 
 	router := gin.Default()
 
