@@ -1,0 +1,138 @@
+basePath: /
+definitions:
+  handlers.ChatRequest:
+    properties:
+      messages:
+        description: 聊天记录数组（包括历史消息）
+        items:
+          $ref: '#/definitions/handlers.OpenAIChatMessage'
+        type: array
+    type: object
+  handlers.ErrorResponse:
+    properties:
+      error:
+        example: something went wrong
+        type: string
+    type: object
+  handlers.OpenAIChatMessage:
+    properties:
+      content:
+        description: 消息内容
+        type: string
+      role:
+        description: '"user"、"assistant" 或 "system"'
+        type: string
+    type: object
+  handlers.Response:
+    properties:
+      text:
+        example: hello world
+        type: string
+    type: object
+  handlers.TTSRequest:
+    properties:
+      text:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: 基于 OpenAI 的语音助手 API 接口
+  title: Go Voice API
+  version: "1.0"
+paths:
+  /api/chat:
+    post:
+      consumes:
+      - application/json
+      description: 使用 OpenAI GPT 与用户对话（支持上下文消息）
+      parameters:
+      - description: 聊天消息数组（包括历史消息）
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.ChatRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: 聊天接口
+      tags:
+      - Chat
+  /api/transcribe:
+    post:
+      consumes:
+      - multipart/form-data
+      description: This API transcribes audio to text
+      parameters:
+      - description: Audio file to be transcribed
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Transcribes an audio file
+      tags:
+      - transcription
+  /api/tts:
+    post:
+      consumes:
+      - application/json
+      description: This API converts provided text into speech audio
+      parameters:
+      - description: Text to be converted to speech
+        in: body
+        name: text
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.TTSRequest'
+      produces:
+      - audio/mpeg
+      responses:
+        "200":
+          description: Audio file containing the speech
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Converts text to speech
+      tags:
+      - tts
+swagger: "2.0"

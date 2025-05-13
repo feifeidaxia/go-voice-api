@@ -1,0 +1,57 @@
+# .gitignore for Go projects
+
+# Binary files which can be regenerated from source code
+*.exe
+*.out
+*.dll
+*.so
+
+# Build artifacts
+bin/
+
+# Dependency directories
+vendor/
+Godeps/_workspace/
+
+# Test and coverage reports
+*.cov
+*.prof
+*.out
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# IDE specific files
+*.iml
+*.idea/
+*.ipr
+*.iws
+*.run
+*.suo
+*.sln
+*.swp
+*.tmproj
+*.user
+*.vscode/
+
+# Temporary files
+*.tmp
+*.swp
+*.log
+*.pid
+
+.env
+# Go module cache
+# Delete the entire module cache. Alternatively, you could
+# keep go.sum and cache/ in source control, and only delete specific
+# modules as needed.
+# go/pkg/mod/
+
+# Go build cache (introduced in Go 1.10)
+# For more info see: https://golang.org/cmd/go/#hdr-Build_and_test_caching
+# Delete cache/ only if your workflow does not require it.
+# cache/
+
+# Go compiler artifacts
+*.[568ao]
