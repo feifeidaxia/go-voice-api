@@ -35,6 +35,11 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"message": "Server running"})
 	})
 
+	//方便UptimeRobot等监控工具使用
+	router.HEAD("/", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
 	// 注册 Swagger 文档路由
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
