@@ -8,14 +8,15 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/gin-gonic/gin"
 	"go-voice-api/utils"
+
+	"github.com/gin-gonic/gin"
 )
 
 // ChatRequest 接收前端传来的聊天请求（支持上下文 + 可选参数）
 type ChatRequest struct {
 	Messages    []OpenAIChatMessage `json:"messages" binding:"required"`
-	MaxTokens   *int                `json:"max_tokens,omitempty"`   // 可选
+	MaxTokens   *int                `json:"max_tokens,omitempty"`  // 可选
 	Temperature *float32            `json:"temperature,omitempty"` // 可选
 }
 
@@ -27,7 +28,7 @@ type OpenAIChatMessage struct {
 
 // OpenAIChatRequest 发送给 OpenAI 的请求
 type OpenAIChatRequest struct {
-	Model       string              `json:"model"`
+	Model       string              `json:"model,omitempty"`
 	Messages    []OpenAIChatMessage `json:"messages"`
 	MaxTokens   int                 `json:"max_tokens,omitempty"`
 	Temperature float32             `json:"temperature,omitempty"`
