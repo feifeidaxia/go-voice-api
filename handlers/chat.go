@@ -15,7 +15,8 @@ import (
 
 // ChatRequest 接收前端传来的聊天请求（支持上下文 + 可选参数）
 type ChatRequest struct {
-	Messages    []OpenAIChatMessage `json:"messages" binding:"required"`
+	Messages    []OpenAIChatMessage `json:"messages"`              // 前端必须传 messages
+	Model       *string             `json:"model,omitempty"`       // 可选，前端可覆盖模型
 	MaxTokens   *int                `json:"max_tokens,omitempty"`  // 可选
 	Temperature *float32            `json:"temperature,omitempty"` // 可选
 }
@@ -28,7 +29,7 @@ type OpenAIChatMessage struct {
 
 // OpenAIChatRequest 发送给 OpenAI 的请求
 type OpenAIChatRequest struct {
-	Model       string              `json:"model,omitempty"`
+	Model       string              `json:"model"`
 	Messages    []OpenAIChatMessage `json:"messages"`
 	MaxTokens   int                 `json:"max_tokens,omitempty"`
 	Temperature float32             `json:"temperature,omitempty"`
@@ -49,9 +50,16 @@ func ChatHandler(c *gin.Context) {
 		return
 	}
 
+	// 手动检查 messages
+	if req.Messages == nil || len(req.Messages) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "messages cannot be empty"})
+		return
+	}
+
 	// 默认值
 	maxTokens := 1000
 	temperature := float32(0.7)
+	model := "gpt-3.5-turbo" // 默认模型
 
 	// 如果前端传了，就覆盖默认值
 	if req.MaxTokens != nil {
@@ -60,9 +68,12 @@ func ChatHandler(c *gin.Context) {
 	if req.Temperature != nil {
 		temperature = *req.Temperature
 	}
+	if req.Model != nil && *req.Model != "" {
+		model = *req.Model
+	}
 
 	openaiReq := OpenAIChatRequest{
-		Model:       "gpt-3.5-turbo",
+		Model:       model,
 		Messages:    req.Messages,
 		MaxTokens:   maxTokens,
 		Temperature: temperature,
@@ -99,6 +110,12 @@ func ChatHandler(c *gin.Context) {
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read response"})
+		return
+	}
+
+	if resp.StatusCode != 200 {
+		log.Println("OpenAI returned error:", string(body))
+		c.JSON(resp.StatusCode, gin.H{"error": "OpenAI API returned error", "detail": string(body)})
 		return
 	}
 
