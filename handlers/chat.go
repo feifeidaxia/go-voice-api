@@ -8,29 +8,32 @@ import (
 	"net/http"
 	"os"
 
-	"go-voice-api/utils"
-
 	"github.com/gin-gonic/gin"
+	"go-voice-api/utils"
 )
 
-// ChatRequest 接收前端传来的聊天请求，支持完整历史消息
+// ChatRequest 接收前端传来的聊天请求（支持上下文 + 可选参数）
 type ChatRequest struct {
-	Messages []OpenAIChatMessage `json:"messages"` // 聊天记录数组（包括历史消息）
+	Messages    []OpenAIChatMessage `json:"messages" binding:"required"`
+	MaxTokens   *int                `json:"max_tokens,omitempty"`   // 可选
+	Temperature *float32            `json:"temperature,omitempty"` // 可选
 }
 
 // OpenAIChatMessage 表示单条聊天消息
 type OpenAIChatMessage struct {
-	Role    string `json:"role"`    // "user"、"assistant" 或 "system"
-	Content string `json:"content"` // 消息内容
+	Role    string `json:"role"`
+	Content string `json:"content"`
 }
 
-// OpenAIChatRequest 是发送给 OpenAI 的请求结构
+// OpenAIChatRequest 发送给 OpenAI 的请求
 type OpenAIChatRequest struct {
-	Model    string              `json:"model"`    // 模型名称，例如 "gpt-3.5-turbo"
-	Messages []OpenAIChatMessage `json:"messages"` // 消息数组
+	Model       string              `json:"model"`
+	Messages    []OpenAIChatMessage `json:"messages"`
+	MaxTokens   int                 `json:"max_tokens,omitempty"`
+	Temperature float32             `json:"temperature,omitempty"`
 }
 
-// OpenAIChatResponse 表示 OpenAI 返回的响应结构
+// OpenAIChatResponse 表示 OpenAI 的返回
 type OpenAIChatResponse struct {
 	Choices []struct {
 		Message OpenAIChatMessage `json:"message"`
@@ -38,16 +41,6 @@ type OpenAIChatResponse struct {
 }
 
 // ChatHandler 处理聊天请求
-// @Summary 聊天接口
-// @Description 使用 OpenAI GPT 与用户对话（支持上下文消息）
-// @Tags Chat
-// @Accept json
-// @Produce json
-// @Param request body ChatRequest true "聊天消息数组（包括历史消息）"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]string
-// @Failure 500 {object} map[string]string
-// @Router /api/chat [post]
 func ChatHandler(c *gin.Context) {
 	var req ChatRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -55,9 +48,23 @@ func ChatHandler(c *gin.Context) {
 		return
 	}
 
+	// 默认值
+	maxTokens := 1000
+	temperature := float32(0.7)
+
+	// 如果前端传了，就覆盖默认值
+	if req.MaxTokens != nil {
+		maxTokens = *req.MaxTokens
+	}
+	if req.Temperature != nil {
+		temperature = *req.Temperature
+	}
+
 	openaiReq := OpenAIChatRequest{
-		Model:    "gpt-3.5-turbo",
-		Messages: req.Messages,
+		Model:       "gpt-3.5-turbo",
+		Messages:    req.Messages,
+		MaxTokens:   maxTokens,
+		Temperature: temperature,
 	}
 
 	payload, err := json.Marshal(openaiReq)
@@ -80,7 +87,6 @@ func ChatHandler(c *gin.Context) {
 	reqOpenAI.Header.Set("Authorization", "Bearer "+openaiKey)
 	reqOpenAI.Header.Set("Content-Type", "application/json")
 
-	// 使用封装的 HTTP 客户端（包含代理配置）
 	resp, err := utils.HTTPClient.Do(reqOpenAI)
 	if err != nil {
 		log.Println("Request error:", err)
