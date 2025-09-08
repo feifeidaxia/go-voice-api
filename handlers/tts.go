@@ -1,12 +1,14 @@
 package handlers
 
 import (
+	"bufio"
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
-	"io"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"go-voice-api/utils"
 
@@ -27,7 +29,7 @@ func TTSHandler(c *gin.Context) {
 	}
 
 	if req.Voice == "" {
-		req.Voice = "nova" // 默认语音
+		req.Voice = "nova"
 	}
 
 	apiKey := os.Getenv("OPENAI_API_KEY")
@@ -37,7 +39,7 @@ func TTSHandler(c *gin.Context) {
 	}
 
 	body := map[string]interface{}{
-		"model":  "gpt-4o-mini-tts", // 流式支持模型
+		"model":  "gpt-4o-mini-tts",
 		"input":  req.Text,
 		"voice":  req.Voice,
 		"stream": req.Stream,
@@ -55,6 +57,7 @@ func TTSHandler(c *gin.Context) {
 
 	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
 	httpReq.Header.Set("Content-Type", "application/json")
+
 	resp, err := utils.HTTPClient.Do(httpReq)
 	if err != nil || resp.StatusCode != 200 {
 		log.Println("Error calling OpenAI TTS API:", err)
@@ -62,16 +65,37 @@ func TTSHandler(c *gin.Context) {
 		return
 	}
 	defer resp.Body.Close()
+
 	if req.Stream {
 		c.Header("Content-Type", "audio/mpeg")
 		c.Header("Cache-Control", "no-cache")
 		c.Writer.WriteHeader(http.StatusOK)
 
-		buf := make([]byte, 4096)
-		for {
-			n, err := resp.Body.Read(buf)
-			if n > 0 {
-				if _, werr := c.Writer.Write(buf[:n]); werr != nil {
+		// 使用 bufio.Scanner 逐行解析 SSE
+		scanner := bufio.NewScanner(resp.Body)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.HasPrefix(line, "data: ") {
+				payload := strings.TrimPrefix(line, "data: ")
+				if payload == "[DONE]" {
+					break
+				}
+
+				var chunk struct {
+					Audio string `json:"audio"` // SSE 返回的 base64
+				}
+				if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
+					log.Println("JSON parse error:", err)
+					continue
+				}
+
+				audioBytes, err := base64.StdEncoding.DecodeString(chunk.Audio)
+				if err != nil {
+					log.Println("Base64 decode error:", err)
+					continue
+				}
+
+				if _, werr := c.Writer.Write(audioBytes); werr != nil {
 					log.Println("Write error:", werr)
 					break
 				}
@@ -79,15 +103,13 @@ func TTSHandler(c *gin.Context) {
 					flusher.Flush()
 				}
 			}
-			if err != nil {
-				if err != io.EOF {
-					log.Println("Read error:", err)
-				}
-				break
-			}
+		}
+
+		if err := scanner.Err(); err != nil {
+			log.Println("Scanner error:", err)
 		}
 	} else {
-		// 非流式
+		// 非流式直接返回
 		audioData, err := io.ReadAll(resp.Body)
 		if err != nil {
 			log.Println("Error reading audio response:", err)
