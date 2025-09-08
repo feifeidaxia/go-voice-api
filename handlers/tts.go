@@ -14,8 +14,9 @@ import (
 )
 
 type TTSRequest struct {
-	Text  string `json:"text"`
-	Voice string `json:"voice"` // 用户选择的语音风格
+	Text   string `json:"text"`
+	Voice  string `json:"voice"`  // 用户选择的语音风格
+	Stream bool   `json:"stream"` // 是否流式返回
 }
 
 // @Summary Converts text to speech
@@ -35,9 +36,9 @@ func TTSHandler(c *gin.Context) {
 		return
 	}
 
-	// 如果没有传入 voice，则使用默认值
+	// 默认 voice
 	if req.Voice == "" {
-		req.Voice = "nova" // 默认语音
+		req.Voice = "nova"
 	}
 
 	apiKey := os.Getenv("OPENAI_API_KEY")
@@ -48,9 +49,10 @@ func TTSHandler(c *gin.Context) {
 
 	// 调用 OpenAI 的 TTS 接口
 	body := map[string]interface{}{
-		"model": "tts-1",   // OpenAI TTS 模型
-		"input": req.Text,  // 用户输入的文本
-		"voice": req.Voice, // 使用传入的 voice 字段，或默认的 "nova"
+		"model":  "tts-1",
+		"input":  req.Text,
+		"voice":  req.Voice,
+		"stream": req.Stream, // 只要传 true，就会流式
 	}
 	jsonBody, _ := json.Marshal(body)
 
@@ -74,13 +76,23 @@ func TTSHandler(c *gin.Context) {
 	}
 	defer resp.Body.Close()
 
-	audioData, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Println("Error reading audio response:", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read audio response"})
-		return
-	}
+	if req.Stream {
+		// 流式传输
+		c.Header("Content-Type", "audio/mpeg")
+		c.Status(http.StatusOK)
 
-	// 返回音频给客户端
-	c.Data(http.StatusOK, "audio/mpeg", audioData)
+		// 将 OpenAI 响应体直接 copy 给前端
+		if _, err := io.Copy(c.Writer, resp.Body); err != nil {
+			log.Println("Error streaming audio:", err)
+		}
+	} else {
+		// 非流式，一次性读完
+		audioData, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Println("Error reading audio response:", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read audio response"})
+			return
+		}
+		c.Data(http.StatusOK, "audio/mpeg", audioData)
+	}
 }
