@@ -1,14 +1,12 @@
 package handlers
 
 import (
-	"bufio"
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"os"
-	"strings"
 
 	"go-voice-api/utils"
 
@@ -16,11 +14,20 @@ import (
 )
 
 type TTSRequest struct {
-	Text   string `json:"text"`
-	Voice  string `json:"voice"`  // 用户选择的语音风格
-	Stream bool   `json:"stream"` // 是否流式返回
+	Text  string `json:"text"`
+	Voice string `json:"voice"` // 用户选择的语音风格
 }
 
+// @Summary Converts text to speech
+// @Description This API converts provided text into speech audio
+// @Tags tts
+// @Accept json
+// @Produce audio/mpeg
+// @Param text body TTSRequest true "Text to be converted to speech"
+// @Success 200 {file} AudioFile "Audio file containing the speech"
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/tts [post]
 func TTSHandler(c *gin.Context) {
 	var req TTSRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.Text == "" {
@@ -28,8 +35,9 @@ func TTSHandler(c *gin.Context) {
 		return
 	}
 
+	// 如果没有传入 voice，则使用默认值
 	if req.Voice == "" {
-		req.Voice = "nova"
+		req.Voice = "nova" // 默认语音
 	}
 
 	apiKey := os.Getenv("OPENAI_API_KEY")
@@ -38,16 +46,15 @@ func TTSHandler(c *gin.Context) {
 		return
 	}
 
+	// 调用 OpenAI 的 TTS 接口
 	body := map[string]interface{}{
-		"model":  "gpt-4o-mini-tts",
-		"input":  req.Text,
-		"voice":  req.Voice,
-		"stream": req.Stream,
+		"model": "tts-1",   // OpenAI TTS 模型
+		"input": req.Text,  // 用户输入的文本
+		"voice": req.Voice, // 使用传入的 voice 字段，或默认的 "nova"
 	}
-
 	jsonBody, _ := json.Marshal(body)
-	reqUrl := "https://api.openai.com/v1/audio/speech"
 
+	reqUrl := "https://api.openai.com/v1/audio/speech"
 	httpReq, err := http.NewRequest("POST", reqUrl, bytes.NewReader(jsonBody))
 	if err != nil {
 		log.Println("Error creating request:", err)
@@ -58,6 +65,7 @@ func TTSHandler(c *gin.Context) {
 	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
 	httpReq.Header.Set("Content-Type", "application/json")
 
+	// 使用封装的 HTTP 客户端（包含代理配置）
 	resp, err := utils.HTTPClient.Do(httpReq)
 	if err != nil || resp.StatusCode != 200 {
 		log.Println("Error calling OpenAI TTS API:", err)
@@ -66,56 +74,13 @@ func TTSHandler(c *gin.Context) {
 	}
 	defer resp.Body.Close()
 
-	if req.Stream {
-		c.Header("Content-Type", "audio/mpeg")
-		c.Header("Cache-Control", "no-cache")
-		c.Writer.WriteHeader(http.StatusOK)
-
-		// 使用 bufio.Scanner 逐行解析 SSE
-		scanner := bufio.NewScanner(resp.Body)
-		for scanner.Scan() {
-			line := scanner.Text()
-			if strings.HasPrefix(line, "data: ") {
-				payload := strings.TrimPrefix(line, "data: ")
-				if payload == "[DONE]" {
-					break
-				}
-
-				var chunk struct {
-					Audio string `json:"audio"` // SSE 返回的 base64
-				}
-				if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
-					log.Println("JSON parse error:", err)
-					continue
-				}
-
-				audioBytes, err := base64.StdEncoding.DecodeString(chunk.Audio)
-				if err != nil {
-					log.Println("Base64 decode error:", err)
-					continue
-				}
-
-				if _, werr := c.Writer.Write(audioBytes); werr != nil {
-					log.Println("Write error:", werr)
-					break
-				}
-				if flusher, ok := c.Writer.(http.Flusher); ok {
-					flusher.Flush()
-				}
-			}
-		}
-
-		if err := scanner.Err(); err != nil {
-			log.Println("Scanner error:", err)
-		}
-	} else {
-		// 非流式直接返回
-		audioData, err := io.ReadAll(resp.Body)
-		if err != nil {
-			log.Println("Error reading audio response:", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read audio response"})
-			return
-		}
-		c.Data(http.StatusOK, "audio/mpeg", audioData)
+	audioData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Println("Error reading audio response:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read audio response"})
+		return
 	}
+
+	// 返回音频给客户端
+	c.Data(http.StatusOK, "audio/mpeg", audioData)
 }
