@@ -55,7 +55,6 @@ func TTSHandler(c *gin.Context) {
 
 	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
 	httpReq.Header.Set("Content-Type", "application/json")
-
 	resp, err := utils.HTTPClient.Do(httpReq)
 	if err != nil || resp.StatusCode != 200 {
 		log.Println("Error calling OpenAI TTS API:", err)
@@ -65,17 +64,20 @@ func TTSHandler(c *gin.Context) {
 	defer resp.Body.Close()
 	if req.Stream {
 		c.Header("Content-Type", "audio/mpeg")
-		c.Status(http.StatusOK)
+		c.Header("Cache-Control", "no-cache")
+		c.Writer.WriteHeader(http.StatusOK)
 
-		buf := make([]byte, 1024)
+		buf := make([]byte, 4096)
 		for {
 			n, err := resp.Body.Read(buf)
 			if n > 0 {
 				if _, werr := c.Writer.Write(buf[:n]); werr != nil {
-					log.Println("Error writing chunk:", werr)
+					log.Println("Write error:", werr)
 					break
 				}
-				c.Writer.Flush()
+				if flusher, ok := c.Writer.(http.Flusher); ok {
+					flusher.Flush()
+				}
 			}
 			if err != nil {
 				if err != io.EOF {
