@@ -63,13 +63,26 @@ func TTSHandler(c *gin.Context) {
 		return
 	}
 	defer resp.Body.Close()
-
 	if req.Stream {
-		// 流式传输
-		c.Header("Content-Type", "audio/wav")
+		c.Header("Content-Type", "audio/mpeg")
 		c.Status(http.StatusOK)
-		if _, err := io.Copy(c.Writer, resp.Body); err != nil {
-			log.Println("Error streaming audio:", err)
+
+		buf := make([]byte, 1024)
+		for {
+			n, err := resp.Body.Read(buf)
+			if n > 0 {
+				if _, werr := c.Writer.Write(buf[:n]); werr != nil {
+					log.Println("Error writing chunk:", werr)
+					break
+				}
+				c.Writer.Flush()
+			}
+			if err != nil {
+				if err != io.EOF {
+					log.Println("Read error:", err)
+				}
+				break
+			}
 		}
 	} else {
 		// 非流式
